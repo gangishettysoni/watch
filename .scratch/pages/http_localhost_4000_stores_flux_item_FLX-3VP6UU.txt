@@ -1,0 +1,4 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Halden Copper Cast Iron Pan — Flux</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="flux-build" content="b7228f8ad">
+<style>body{font-family:system-ui,sans-serif;max-width:900px;margin:2rem auto;padding:0 1rem;color:#222}a{color:#0b57d0}.muted{color:#666}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem}.card{border:1px solid #ddd;border-radius:8px;padding:1rem}s{color:#888}</style>
+</head><body><nav><a href="/stores/flux/">← Flux</a></nav><div class="pdp" data-sku="FLX-3VP6UU"><h1>Halden Copper Cast Iron Pan</h1><div class="pdp__offer"><span class="pdp__price" data-price>…</span> <span class="muted" data-stock></span></div></div><script src="/stores/flux/bundle.js"></script></body></html>

@@ -1,0 +1,6 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Just a moment…</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{font-family:system-ui,sans-serif;max-width:900px;margin:2rem auto;padding:0 1rem;color:#222}a{color:#0b57d0}.muted{color:#666}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem}.card{border:1px solid #ddd;border-radius:8px;padding:1rem}s{color:#888}</style>
+</head><body><div id="cf-c" data-s="1789666958278.343ae0c68c364bf309280dc0" data-p="/stores/shield"><h1>Checking your browser before accessing Shield Outfitters…</h1>
+<p class="muted">This process is automatic. Your browser will redirect shortly.</p><noscript>Please enable JavaScript and cookies.</noscript></div>
+<script>(async()=>{const e=document.getElementById("cf-c"),t=e.dataset.s,n=e.dataset.p,r=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t+String.fromCharCode(124)+n)),a=[...new Uint8Array(r)].map(x=>x.toString(16).padStart(2,"0")).join("").slice(0,16);await new Promise(z=>setTimeout(z,1300));const o=await fetch("/stores/shield/challenge",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({s:t,p:n,a})});o.ok&&location.reload()})();</script></body></html>

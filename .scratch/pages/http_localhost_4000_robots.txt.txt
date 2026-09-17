@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /stores/zon/dp/*/offers-all
+Disallow: /grader-truth
+Crawl-delay: 1
