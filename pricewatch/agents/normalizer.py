@@ -27,16 +27,39 @@ def detect_currency(text: str, default: Optional[str] = None) -> Optional[str]:
 
 
 def parse_money(text: str, default_currency: Optional[str] = None) -> tuple[Optional[int], Optional[str]]:
-    """Parse a printed price like "$1,299.00" into (129900, "USD").
+    """Parse a printed price like "$1,299.00" or "937,20 €" into minor units.
 
     Returns (None, currency) when no number is present.
     """
     if text is None:
         return None, default_currency
     currency = detect_currency(text, default_currency)
-    digits = re.sub(r"[^\d.]", "", text)
-    if not digits or digits == ".":
+    digits = re.sub(r"[^\d,\.]", "", text).strip()
+    if not digits or digits in {".", ","}:
         return None, currency
+
+    # Handle European formatting first: 937,20 -> 937.20 ; 1.234,56 -> 1234.56.
+    if "," in digits and "." not in digits:
+        if digits.count(",") > 1:
+            digits = digits.replace(",", "")
+        else:
+            left, right = digits.split(",", 1)
+            if len(right) in (1, 2):
+                digits = f"{left}.{right}"
+            else:
+                digits = digits.replace(",", "")
+    elif "," in digits and "." in digits:
+        if digits.rfind(",") > digits.rfind("."):
+            digits = digits.replace(".", "").replace(",", ".")
+        else:
+            digits = digits.replace(",", "")
+    elif "." in digits:
+        parts = digits.split(".")
+        if len(parts) > 1 and len(parts[-1]) in (1, 2):
+            pass
+        else:
+            digits = "".join(parts)
+
     try:
         amount = float(digits)
     except ValueError:

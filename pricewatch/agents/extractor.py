@@ -8,10 +8,11 @@ Adapters are registered by name; `stores.yaml` maps each store to an adapter.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from typing import Callable, Optional
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup
 
@@ -56,8 +57,11 @@ def extract_corner(client: Client, store: str, url: str, html: str) -> Observati
 def extract_maple(client: Client, store: str, url: str, html: str) -> Observation:
     soup = BeautifulSoup(html, "html.parser")
     name = soup.select_one(".product__title").get_text(strip=True)
-    price_el = soup.select_one(".price .price")  # first price element in the price block
-    price_cents, currency = parse_money(price_el.get_text(" ", strip=True), "EUR")
+    price_candidates = soup.select(".price .price")
+    price_el = next((el for el in reversed(price_candidates) if "price--compare" not in el.get("class", [])), None)
+    if price_el is None:
+        price_el = soup.select_one(".price--sale") or soup.select_one(".price .price")
+    price_cents, currency = parse_money(price_el.get_text(" ", strip=True), "EUR") if price_el else (None, "EUR")
     compare_el = soup.select_one(".price--compare")
     compare, _ = parse_money(compare_el.get_text(" ", strip=True), currency) if compare_el else (None, None)
     avail = "out_of_stock" if "Sold out" in soup.get_text() else "in_stock"
@@ -102,16 +106,106 @@ def extract_zon(client: Client, store: str, url: str, html: str) -> Observation:
 # --------------------------------------------------------------------------- levels 4-5
 @adapter("shield")
 def extract_shield(client: Client, store: str, url: str, html: str) -> Observation:
-    # TODO: not implemented yet.
-    return Observation(store=store, product_id=_pid_from_url(url), url=url, name="", price_cents=None,
-                       currency="GBP", notes=["shield adapter not implemented"])
+    soup = BeautifulSoup(html, "html.parser")
+    if "Are you a human" in html or "Checking your browser" in html or "Just a moment" in html:
+        return Observation(store=store, product_id=_pid_from_url(url), url=url, name="", price_cents=None,
+                           currency="GBP", availability="unknown", notes=["shield challenge page"])
+
+    name = ""
+    h1 = soup.find("h1")
+    if h1:
+        name = h1.get_text(" ", strip=True)
+    if not name:
+        title = soup.find("title")
+        if title:
+            name = title.get_text(" ", strip=True).replace("— Shield Outfitters", "").strip()
+
+    price_candidates = []
+    for sel in ("strong", ".price", "[data-price]", "span", "p", "li", ".money"):
+        for el in soup.select(sel):
+            txt = el.get_text(" ", strip=True)
+            if txt and any(ch.isdigit() for ch in txt):
+                price_candidates.append(txt)
+    price_cents = None
+    currency = "GBP"
+    for text in price_candidates:
+        amount, picked = parse_money(text, currency)
+        if amount is not None:
+            price_cents, currency = amount, picked or currency
+            break
+    if price_cents is None:
+        text = soup.get_text(" ", strip=True)
+        amount, picked = parse_money(text, currency)
+        if amount is not None:
+            price_cents, currency = amount, picked or currency
+    availability = "in_stock" if "in stock" in soup.get_text(" ", strip=True).lower() else "out_of_stock" if "out of stock" in soup.get_text(" ", strip=True).lower() else "unknown"
+    return Observation(
+        store=store, product_id=_pid_from_url(url), url=url, name=name,
+        price_cents=price_cents, currency=currency, availability=availability,
+    )
 
 
 @adapter("flux")
 def extract_flux(client: Client, store: str, url: str, html: str) -> Observation:
-    # TODO: not implemented yet.
-    return Observation(store=store, product_id=_pid_from_url(url), url=url, name="", price_cents=None,
-                       currency="USD", notes=["flux adapter not implemented"])
+    soup = BeautifulSoup(html, "html.parser")
+    sku = (soup.select_one("[data-sku]") or {}).get("data-sku") or _pid_from_url(url)
+    product = None
+    build = (soup.select_one('meta[name="flux-build"]') or {}).get("content")
+    api_url = urljoin(url, "/stores/flux/api/graphql")
+    query = "query($sku:String!){product(sku:$sku){sku title offer{amount unit currency stock stale}}}"
+    payload = {"query": query, "variables": {"sku": sku}}
+    headers = {"content-type": "application/json"}
+    if build:
+        headers["x-flux-build"] = build
+    try:
+        if sku:
+            sig_seed = "fx_1b11e1e8cfb25a950a27|" + sku
+            headers["x-flux-sig"] = hashlib.sha256(sig_seed.encode("utf-8")).hexdigest()[:24]
+            r = client.post(api_url, json=payload, headers=headers)
+            if r.status_code == 200:
+                data = r.json()
+                product = data.get("data", {}).get("product")
+    except Exception:
+        product = None
+
+    if product is None:
+        title = soup.find("h1")
+        text = soup.get_text(" ", strip=True)
+        currency = "USD"
+        price_cents = None
+        for candidate in re.findall(r"\$\s?\d[\d,]*(?:\.\d+)?|USD\s?\d[\d,]*(?:\.\d+)?", text):
+            val, cur = parse_money(candidate, currency)
+            if val is not None:
+                price_cents, currency = val, cur or currency
+                break
+        fallback = title.get_text(" ", strip=True) if title else ""
+        return Observation(store=store, product_id=_pid_from_url(url), url=url, name=fallback, price_cents=price_cents,
+                           currency=currency, availability="in_stock" if "in stock" in text.lower() else "out_of_stock" if "out of stock" in text.lower() else "unknown")
+
+    offer = product.get("offer") or {}
+    amount = offer.get("amount")
+    unit = offer.get("unit")
+    if amount is None:
+        price_cents = None
+    else:
+        try:
+            amount_f = float(amount)
+            if unit == "major":
+                price_cents = int(round(amount_f * 100))
+            else:
+                price_cents = int(round(amount_f))
+        except (TypeError, ValueError):
+            price_cents = None
+
+    currency = offer.get("currency") or "USD"
+    stock = offer.get("stock")
+    avail = "in_stock" if stock == "IN_STOCK" else "out_of_stock" if stock == "OUT_OF_STOCK" else "unknown"
+    title = product.get("title") or (soup.find("h1") or {}).get_text(" ", strip=True) or ""
+    return Observation(
+        store=store, product_id=_pid_from_url(url), url=url, name=title,
+        price_cents=price_cents, currency=currency, availability=avail,
+        notes=["last known price"] if offer.get("stale") else [],
+    )
 
 
 def extract(client: Client, store: str, adapter_name: str, url: str, html: str) -> Observation:

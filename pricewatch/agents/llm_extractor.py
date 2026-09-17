@@ -10,7 +10,7 @@ import re
 from bs4 import BeautifulSoup
 
 from ..models import Observation
-from ..providers import Provider
+from ..providers import Provider, ProviderError
 
 SYSTEM = """You extract e-commerce offer data from a product page and answer ONLY with a JSON object:
 {"name": str|null, "price_cents": int|null, "currency": "ISO-4217"|null, "availability": "in_stock"|"out_of_stock"|"unknown",
@@ -29,7 +29,12 @@ def clean_html(html: str, limit: int = 12000) -> str:
 def extract_with_llm(provider: Provider, store: str, url: str, html: str, timeout: float = 30.0) -> Observation:
     user = f"URL: {url}\n\nPAGE TEXT:\n{clean_html(html)}"
     raw = provider.complete(SYSTEM, user, metadata={"source_url": url, "store": store}, timeout=timeout)
-    data = json.loads(raw)
+    try:
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            raise ValueError("LLM response is not a JSON object")
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise ProviderError(f"malformed model output: {exc}") from exc
     return Observation(
         store=store, product_id=url.rstrip("/").split("/")[-1], url=url, name=data.get("name") or "",
         price_cents=data.get("price_cents"), currency=data.get("currency") or "",

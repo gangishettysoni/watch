@@ -19,7 +19,7 @@ DEFAULT_HEADERS = {
 
 
 class Client:
-    def __init__(self, min_interval: float = 0.0, timeout: float = 10.0, retries: int = 2):
+    def __init__(self, min_interval: float = 0.5, timeout: float = 10.0, retries: int = 2):
         self.session = requests.Session()
         self.session.headers.update(DEFAULT_HEADERS)
         adapter = requests.adapters.HTTPAdapter(pool_connections=8, pool_maxsize=32)
